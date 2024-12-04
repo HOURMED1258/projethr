@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carte Interactive</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        #map1 {
+            height: 100vh;
+            width: 100%;
+        }
+
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .checkbox-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            display: none; /* Cache la case à cocher par défaut */
+        }
+
+        .checkbox-custom {
+            width: 20px;
+            height: 20px;
+            background-color: #f1f1f1;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            margin-right: 10px;
+            position: relative;
+            transition: background-color 0.3s ease, border 0.3s ease;
+        }
+
+        .checkbox-custom::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            background-color: #4CAF50;
+            border-radius: 2px;
+            transform: translate(-50%, -50%) scale(0);
+            transition: transform 0.3s ease;
+        }
+
+        .checkbox-label input[type="checkbox"]:checked + .checkbox-custom {
+            background-color: #4CAF50;
+            border-color: #4CAF50;
+        }
+
+        .checkbox-label input[type="checkbox"]:checked + .checkbox-custom::before {
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .checkbox-label:hover .checkbox-custom {
+            border-color: #4CAF50;
+        }
+
+        .legend {
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 5px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .color-box {
+            width: 20px;
+            height: 20px;
+            margin-right: 5px;
+        }
+
+        /* Nouvelle légende pour la confiance */
+        .confidence-legend {
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+
+        .confidence-legend h4 {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .confidence-legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .confidence-color-box {
+            width: 20px;
+            height: 20px;
+            margin-right: 5px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="map1"></div>
+
+    <div class="controls">
+        <div class="checkbox-container">
+            <label class="checkbox-label">
+                <input type="checkbox" id="toggle-communes" checked>
+                <div class="checkbox-custom"></div>
+                Afficher les communes
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" id="toggle-batiments" checked>
+                <div class="checkbox-custom"></div>
+                Afficher les bâtiments
+            </label>
+        </div>
+
+        <br><br>
+
+        <select id="communeSelect">
+            <option value="">Sélectionnez une commune</option>
+        </select>
+
+        <br><br>
+
+    </div>
+
+
+    <!-- Nouvelle légende pour la Confiance -->
+    <div class="confidence-legend">
+        <h4>Légende de la Confiance</h4>
+        <div class="confidence-legend-item">
+            <div class="confidence-color-box" style="background: #e40808;"></div><span>Faible</span>
+        </div>
+        <div class="confidence-legend-item">
+            <div class="confidence-color-box" style="background: #963118;"></div><span>Moyenne</span>
+        </div>
+        <div class="confidence-legend-item">
+            <div class="confidence-color-box" style="background: #215a21;"></div><span>Haute</span>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Commune colors object
+            const communeColors = {
+                "ABADOU": "#FF5733",
+                "AGHBAR": "#33FF57",
+                "AIT AADEL": "#3357FF",
+                "AIT FASKA": "#FF33A1",
+                "AIT HKIM AIT YZID": "#FFD700",
+                "AIT OURIR": "#8A2BE2",
+                "AMGHRAS": "#FF1493",
+                "AMIZMIZ": "#00BFFF",
+                "ANOUGAL": "#C71585",
+                "ASNI": "#DC143C",
+                "AZGOUR": "#FF4500",
+                "TAZART": "#FF6347",
+                "AIT SIDI DAOUD": "#32CD32",
+                "GHMATE": "#8B008B",
+                "TAMAGUERT": "#FF8C00",
+                "OURIKA": "#228B22",
+                "OULAD MTAA": "#FFD700",
+                "ZERKTEN": "#ADFF2F",
+                "DAR JAMAA": "#D2691E",
+                "TALAT N'YAAQOUB": "#FF4500",
+                "OUAZGUITA": "#2E8B57",
+                "OUIRGANE": "#20B2AA",
+                "OUKAIMDEN": "#D8BFD8",
+                "MOULAY BRAHIM": "#9932CC",
+                "SIDI ABDALLAH GHIAT": "#B22222",
+                "IGHIL": "#8B0000",
+                "IGUERFEROUANE": "#FF69B4",
+                "IJOUKAK": "#6A5ACD",
+                "IMGDAL": "#FF7F50",
+                "TIDILI MESFIOUA": "#48D1CC",
+                "TIGHEDOUINE": "#7FFF00",
+                "LALLA TAKARKOUST": "#D2691E",
+                "TIZGUINE": "#FF1493",
+                "TAMAZOUZTE": "#FF6347",
+                "TAMESLOHTE": "#C71585",
+                "SIDI BADHAJ": "#DC143C",
+                "AGHOUATIM": "#FF4500",
+                "STI FADMA": "#FF6347",
+                "TOUAMA": "#2E8B57",
+                "TAHANNAOUT": "#20B2AA"
+            };
+
+            let communeLayer = null;
+            let batimentLayers = {};
+
+            // Initialize map
+            const map = L.map('map1').setView([31.4266, -8.0328], 9);
+
+            // Add base tile layer
+            L.tileLayer('https://api.mapbox.com/styles/v1/elaounijassim/claz9neo300li14mpxy0alzzo/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoiZWxhb3VuaWphc3NpbSIsImEiOiJjbGF5ZmswaXIwNzhvM3FtbHhiZ2o3eG94In0.2D5g4-DntItXKK1ylEJsrQ', {
+    maxZoom: 19,
+    attribution: "© <a href='https://www.mapbox.com/about/maps/'>Mapbox</a> © <a href='http://www.openstreetmap.org/copyright'>OpenStreetMap</a>"
+}).addTo(map);
+
+            // Populate commune select
+            const select = document.getElementById('communeSelect');
+            Object.keys(communeColors).forEach(commune => {
+                const option = document.createElement('option');
+                option.value = commune.toLowerCase().replace(/ /g, '_');
+                option.textContent = commune;
+                select.appendChild(option);
+            });
+
+            // Create and add legend
+            const legend = L.control({ position: 'bottomright' });
+            legend.onAdd = function(map) {
+                const div = L.DomUtil.create('div', 'legend');
+                div.innerHTML = '<h4>Légende des Communes</h4>';
+                Object.entries(communeColors).forEach(([commune, color]) => {
+                    div.innerHTML += ` 
+                        <div class="legend-item">
+                            <div class="color-box" style="background: ${color}"></div>
+                            <span>${commune}</span>
+                        </div>`;
+                });
+                return div;
+            };
+            legend.addTo(map);
+
+            // Load and display commune boundaries
+            async function loadCommuneData() {
+                try {
+                    if (!document.getElementById('toggle-communes').checked) {
+                        if (communeLayer) {
+                            map.removeLayer(communeLayer);
+                        }
+                        return;
+                    }
+
+                    const response = await fetch('./data/communes.geojson');
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    
+                    if (communeLayer) {
+                        map.removeLayer(communeLayer);
+                    }
+
+                    communeLayer = L.geoJSON(data, {
+                        style: function(feature) {
+                            return {
+                                fillColor: communeColors[feature.properties.nomcommune] || '#000000',
+                                weight: 2,
+                                opacity: 1,
+                                color: 'white',
+                                fillOpacity: 0.7
+                            };
+                        },
+                        onEachFeature: function(feature, layer) {
+                            layer.bindPopup(`
+                                <h3>${feature.properties.nomcommune}</h3>
+                                <p>Cliquez pour plus d'informations</p>
+                            `);
+                        }
+                    }).addTo(map);
+                } catch (error) {
+                    console.error('Erreur lors du chargement des données:', error);
+                }
+            }
+
+            // Load buildings and categorize by confidence
+            async function loadBatiments(communeName) {
+                try {
+                    if (!document.getElementById('toggle-batiments').checked) {
+                        Object.values(batimentLayers).forEach(layer => {
+                            if (layer) map.removeLayer(layer);
+                        });
+                        return;
+                    }
+
+                    const response = await fetch(`./donner/${communeName}.geojson`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+
+                    // Remove existing building layer if it exists
+                    if (batimentLayers[communeName]) {
+                        map.removeLayer(batimentLayers[communeName]);
+                    }
+
+                    // Create new building layer with confidence categories
+                    batimentLayers[communeName] = L.geoJSON(data, {
+                        style: function(feature) {
+                            const confidence = feature.properties.confidence || 0;
+                            let color = '#ff7800'; // default color for low confidence
+
+                            if (confidence > 0.75) {
+                                color = '#32CD32'; // High confidence (green)
+                            } else if (confidence >= 0.7) {
+                                color = '#FFA500'; // Medium confidence (orange)
+                            }
+
+                            return {
+                                color: color,
+                                weight: 1,
+                                opacity: 1,
+                                fillOpacity: 0.5
+                            };
+                        }
+                    }).addTo(map);
+                } catch (error) {
+                    console.error('Erreur lors du chargement des bâtiments:', error);
+                }
+            }
+
+            // Event listeners for checkboxes
+            document.getElementById('toggle-communes').addEventListener('change', () => {
+                loadCommuneData();
+            });
+
+            document.getElementById('toggle-batiments').addEventListener('change', () => {
+                const selectedCommune = document.getElementById('communeSelect').value;
+                if (selectedCommune) {
+                    loadBatiments(selectedCommune);
+                }
+            });
+
+            // Handle commune selection
+            select.addEventListener('change', async (e) => {
+                const selectedCommune = e.target.value;
+                if (!selectedCommune) {
+                    loadCommuneData();
+                    map.setView([31.4266, -8.0328], 9);
+                    Object.values(batimentLayers).forEach(layer => {
+                        if (layer) map.removeLayer(layer);
+                    });
+                    return;
+                }
+
+                try {
+                    const response = await fetch('./donner/communes.geojson');
+                    const data = await response.json();
+                    
+                    const selectedFeature = data.features.find(feature => 
+                        feature.properties.nomcommune.toLowerCase().replace(/ /g, '_') === selectedCommune
+                    );
+
+                    if (selectedFeature) {
+                        if (communeLayer) {
+                            map.removeLayer(communeLayer);
+                        }
+                        Object.values(batimentLayers).forEach(layer => {
+                            if (layer) map.removeLayer(layer);
+                        });
+
+                        communeLayer = L.geoJSON(selectedFeature, {
+                            style: {
+                                color: communeColors[selectedCommune.replace(/_/g, ' ').toUpperCase()],
+                                weight: 2,
+                                opacity: 1,
+                                fillOpacity: 0.7
+                            }
+                        }).addTo(map);
+
+                        map.fitBounds(communeLayer.getBounds(), {
+                            padding: [50, 50],
+                            maxZoom: 14,
+                            animate: true,
+                            duration: 1.5
+                        });
+
+                        if (document.getElementById('toggle-batiments').checked) {
+                            await loadBatiments(selectedCommune);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Erreur lors du chargement de la commune:', error);
+                    loadCommuneData();
+                }
+            });
+            
+
+            // Query tools functionality
+            const spatialQueryBtn = document.getElementById('spatial-query');
+            const nonSpatialQueryBtn = document.getElementById('non-spatial-query');
+            const spatialCommand = document.getElementById('spatial-command');
+            const nonSpatialCommand = document.getElementById('non-spatial-command');
+
+            spatialQueryBtn.addEventListener('click', () => {
+                spatialCommand.style.display = spatialCommand.style.display === 'none' ? 'block' : 'none';
+                nonSpatialCommand.style.display = 'none';
+            });
+
+            nonSpatialQueryBtn.addEventListener('click', () => {
+                nonSpatialCommand.style.display = nonSpatialCommand.style.display === 'none' ? 'block' : 'none';
+                spatialCommand.style.display = 'none';
+            });
+
+            // Initial load of commune data
+            loadCommuneData();
+        });
+    </script>
+</body>
+</html>
